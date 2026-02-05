@@ -1,0 +1,10 @@
+# Binaries
+ipchecker
+ipchecker.exe
+
+# IDE
+.idea/
+*.iml
+
+# Go
+*.sum
