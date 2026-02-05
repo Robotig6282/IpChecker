@@ -1,12 +1,3 @@
-// Minecraft IP Checker - A minimal Minecraft server that displays client IP addresses
-//
-// This program implements the Minecraft server protocol just enough to:
-// 1. Accept incoming connections on port 25565
-// 2. Parse the handshake packet to extract protocol version
-// 3. Handle status requests (for server list pings)
-// 4. Disconnect login attempts with the client's IP address
-//
-// Protocol reference: https://wiki.vg/Protocol
 package main
 
 import (
@@ -24,6 +15,7 @@ var (
 	port       = flag.Int("port", 25565, "TCP port to listen on")
 	debug      = flag.Bool("debug", false, "Enable verbose debug logging")
 	motdIPShow = flag.Bool("motd-ip-show", false, "Show client IP in MOTD")
+	showVer    = flag.Bool("v", false, "Show version and exit")
 )
 
 // Packet IDs for different states
@@ -50,14 +42,12 @@ const (
 // Stats tracking
 var (
 	connCount int64
+	version   = "dev"
 )
 
 // ============================================================================
 // VarInt Encoding/Decoding
 // ============================================================================
-// Minecraft uses VarInt (variable-length integer) encoding extensively.
-// Similar to Protocol Buffers, each byte uses the high bit (0x80) as a
-// continuation flag. Max 5 bytes for 32-bit integers.
 
 // readVarInt reads a VarInt from the connection
 func readVarInt(conn net.Conn) (int32, error) {
@@ -158,7 +148,6 @@ func readString(conn net.Conn) (string, error) {
 // ============================================================================
 // Packet I/O
 // ============================================================================
-// Minecraft packets are: VarInt length + VarInt packet ID + payload
 
 // sendPacket sends a packet with length prefix
 func sendPacket(conn net.Conn, packetID int32, payload []byte) error {
@@ -225,13 +214,6 @@ func readPacketData(conn net.Conn, length int32) (int32, []byte, error) {
 // Minecraft Protocol Structures
 // ============================================================================
 
-// Handshake represents the client handshake packet
-// Packet ID: 0x00
-// Fields:
-//   - Protocol Version (VarInt): e.g., 763 = 1.19.3, 764 = 1.20.1, 765 = 1.20.2
-//   - Server Address (String): usually "localhost" or the actual server hostname
-//   - Server Port (Unsigned Short): client's intended server port (usually 25565)
-//   - Next State (VarInt): 1 = status, 2 = login
 type Handshake struct {
 	ProtocolVersion int32
 	ServerAddress   string
@@ -540,6 +522,11 @@ func handleConnection(conn net.Conn) {
 func main() {
 	flag.Parse()
 
+	if *showVer {
+		fmt.Printf("ipchecker %s\n", version)
+		return
+	}
+
 	addr := fmt.Sprintf(":%d", *port)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -547,7 +534,7 @@ func main() {
 	}
 	defer listener.Close()
 
-	log.Printf("Minecraft IP Checker listening on %s", addr)
+	log.Printf("Minecraft IP Checker v%s listening on %s", version, addr)
 	if !*debug {
 		log.Printf("Quiet mode - use -debug for verbose logging")
 	}
