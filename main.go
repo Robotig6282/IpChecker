@@ -1,12 +1,17 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"image/png"
 	"log"
 	"net"
+	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -15,6 +20,7 @@ var (
 	port       = flag.Int("port", 25565, "TCP port to listen on")
 	debug      = flag.Bool("debug", false, "Enable verbose debug logging")
 	motdIPShow = flag.Bool("motd-ip-show", false, "Show client IP in MOTD")
+	iconPath   = flag.String("icon", "server-icon.png", "Path to 64x64 PNG icon for server list (set empty to disable)")
 	showVer    = flag.Bool("v", false, "Show version and exit")
 )
 
@@ -43,6 +49,7 @@ const (
 var (
 	connCount int64
 	version   = "dev"
+	favicon   string
 )
 
 // ============================================================================
@@ -234,6 +241,25 @@ type StatusResponse struct {
 	Description struct {
 		Text string `json:"text"`
 	} `json:"description"`
+	Favicon string `json:"favicon,omitempty"`
+}
+
+func loadFaviconFromPNG(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read icon file %q: %w", path, err)
+	}
+
+	cfg, err := png.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return "", fmt.Errorf("decode png %q: %w", path, err)
+	}
+
+	if cfg.Width != 64 || cfg.Height != 64 {
+		return "", fmt.Errorf("icon %q must be 64x64, got %dx%d", path, cfg.Width, cfg.Height)
+	}
+
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(data), nil
 }
 
 // ============================================================================
@@ -342,6 +368,10 @@ func handleStatus(conn net.Conn) error {
 		status.Description.Text = fmt.Sprintf("IP Checker Server\nYour IP: %s", host)
 	} else {
 		status.Description.Text = "IP Checker Server"
+	}
+
+	if favicon != "" {
+		status.Favicon = favicon
 	}
 
 	jsonData, err := json.Marshal(status)
@@ -525,6 +555,16 @@ func main() {
 	if *showVer {
 		fmt.Printf("ipchecker %s\n", version)
 		return
+	}
+
+	if strings.TrimSpace(*iconPath) != "" {
+		loadedFavicon, err := loadFaviconFromPNG(*iconPath)
+		if err != nil {
+			log.Printf("Server icon disabled: %v", err)
+		} else {
+			favicon = loadedFavicon
+			log.Printf("Loaded server icon from %s", *iconPath)
+		}
 	}
 
 	addr := fmt.Sprintf(":%d", *port)
